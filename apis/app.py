@@ -4,9 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func, text, MetaData, Table
 import configparser
 import datetime
-
-app = Flask(__name__)
-api = Api(app)
+from flask_cors import CORS
 
 # 读取配置文件
 config = configparser.ConfigParser()
@@ -20,6 +18,11 @@ password = db_config['password']
 database = db_config['database']
 api_config = config['api']
 near_range = int(api_config['near_range'])
+cors=api_config['cors']
+app = Flask(__name__)
+CORS(app,origins=cors.split(','))
+api = Api(app)
+
 # Configure your SQLAlchemy database URI here
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{user}:{password}@{host}:{port}/{database}'
 db = SQLAlchemy(app)
@@ -28,6 +31,33 @@ def get_table_name(language, version):
     version_replaced = version.replace('.', '_')
     table_name = f"{language}_{version_replaced}"
     return table_name
+
+def search_across_tables(data, lang_version_tables):
+    queries = []
+    for language, version, table_name in lang_version_tables:
+        query = text(f"""
+            SELECT id, name, data, path, MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE) AS score
+            FROM {table_name}
+            WHERE MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE)
+        """)
+        query_results = db.session.execute(query, {'data': data}).fetchall()
+        
+        # Add language and version to each result
+        for result in query_results:
+            queries.append({
+                'id': result[0],
+                'name': result[1],
+                'data': result[2],
+                'path': result[3],
+                'score': result[4],
+                'language': language,
+                'version': version
+            })
+
+    # Sort by score in descending order
+    queries.sort(key=lambda x: x['score'], reverse=True)
+    return queries
+
 class Versions(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     language = db.Column(db.String(255))
@@ -60,27 +90,79 @@ class LatestVersionByLanguage(Resource):
     def get(self):
         latest_versions = db.session.query(Versions.language, func.max(Versions.version)).group_by(Versions.language).all()
         return [{lang: version} for lang, version in latest_versions]
-    
-
 
 class DataByData(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('data', required=True)
-        parser.add_argument('language', required=True)
-        parser.add_argument('version', required=True)
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('language', required=True, location='args')
+        parser.add_argument('version', required=True, location='args')
         args = parser.parse_args()
         table_name = get_table_name(args['language'], args['version'])
         data_table = Data(table_name)
         data = db.session.query(data_table).filter(text("MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE)")).params(data=args['data']).all()
         return [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
 
+class MultiDataByData(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('language', required=True, location='args')
+        parser.add_argument('version', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        args = parser.parse_args()
+        languages = args['languages'].split(',')
+        versions = args['versions'].split(',')
+        table_name = get_table_name(args['language'], args['version'])
+        data_table = Data(table_name)
+        data = db.session.query(data_table).filter(text("MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE)")).params(data=args['data']).all()
+        initResults= [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
+        results = []
+        for initresult in initResults:
+            result=[]
+            for language, version in zip(languages, versions):
+                table_name = get_table_name(language, version)
+                data_table = Data(table_name)
+                data = db.session.query(data_table).filter_by(path=initresult['path'], id=initresult['id']).first()
+                if data:
+                    result.append({'language':language,'version':version,  'data': data.data})
+                else:
+                    result.append({'language':language,'version':version,'data': f'Data not found for language {language} and version {version}'})
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result})
+        return results
+    
+class MultiLanguagesDataByData(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        args = parser.parse_args()
+        languages = args['languages'].split(',')
+        versions = args['versions'].split(',')
+        lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
+        initresults = search_across_tables(args['data'], lang_version_tables)
+        results = []
+        for initresult in initresults:
+            result=[]
+            for language, version in zip(languages, versions):
+                table_name = get_table_name(language, version)
+                data_table = Data(table_name)
+                data = db.session.query(data_table).filter_by(path=initresult['path'], id=initresult['id']).first()
+                if data:
+                    result.append({'language':language,'version':version,  'data': data.data})
+                else:
+                    result.append({'language':language,'version':version,'data': f'Data not found for language {language} and version {version}'})
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result})
+        return results
+       
 class DataByPath(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('path', required=True)
-        parser.add_argument('language', required=True)
-        parser.add_argument('version', required=True)
+        parser.add_argument('path', required=True, location='args')
+        parser.add_argument('language', required=True, location='args')
+        parser.add_argument('version', required=True, location='args')
         args = parser.parse_args()
         table_name = get_table_name(args['language'], args['version'])
         data_table = Data(table_name)
@@ -93,11 +175,11 @@ class DataByPath(Resource):
 class DataAroundPathAndId(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('path', required=True)
-        parser.add_argument('id', required=True, type=int)  # Ensure 'id' is an integer
-        parser.add_argument('language', required=True)
-        parser.add_argument('version', required=True)
-        parser.add_argument('near_range', required=False, type=int)
+        parser.add_argument('path', required=True, location='args')
+        parser.add_argument('id', required=True, type=int, location='args')  # Ensure 'id' is an integer
+        parser.add_argument('language', required=True, location='args')
+        parser.add_argument('version', required=True, location='args')
+        parser.add_argument('near_range', required=False, type=int, location='args')
         args = parser.parse_args()
         table_name = get_table_name(args['language'], args['version'])
         data_table = Data(table_name)
@@ -117,10 +199,10 @@ class DataAroundPathAndId(Resource):
 class MultiLanguagesDataByPathAndId(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('path', required=True)
-        parser.add_argument('id', required=True)
-        parser.add_argument('languages', required=True)
-        parser.add_argument('versions', required=True)
+        parser.add_argument('path', required=True, location='args')
+        parser.add_argument('id', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
         args = parser.parse_args()
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
@@ -138,11 +220,11 @@ class MultiLanguagesDataByPathAndId(Resource):
 class MultiLanguagesDataAroundPathAndId(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('path', required=True)
-        parser.add_argument('id', type=int, required=True)
-        parser.add_argument('languages', required=True)
-        parser.add_argument('versions', required=True)
-        parser.add_argument('near_range', required=False, type=int)
+        parser.add_argument('path', required=True, location='args')
+        parser.add_argument('id', type=int, required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('near_range', required=False, type=int, location='args')
         args = parser.parse_args()
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
@@ -171,6 +253,8 @@ api.add_resource(AllLanguages, '/languages')
 api.add_resource(VersionsByLanguage, '/versions/<string:language>')
 api.add_resource(LatestVersionByLanguage, '/latest_versions')
 api.add_resource(DataByData, '/data_by_data')
+api.add_resource(MultiDataByData, '/multi_data_by_data')
+api.add_resource(MultiLanguagesDataByData, '/multi_language_data_by_data')
 api.add_resource(DataByPath, '/data_by_path')
 api.add_resource(DataAroundPathAndId, '/data_around_path_and_id')
 api.add_resource(MultiLanguagesDataByPathAndId, '/multi_language_data_by_path_and_id')
