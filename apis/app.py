@@ -1,7 +1,7 @@
-from flask import Flask
+from flask import Flask,jsonify
 from flask_restful import Resource, Api, reqparse
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import desc, func, text, MetaData, Table, create_engine, select
+from sqlalchemy import desc, func, text, MetaData, Table, create_engine, select, union_all, literal, or_
 from sqlalchemy.orm import sessionmaker
 import configparser
 import datetime
@@ -111,42 +111,7 @@ def search_across_tables(data, lang_version_tables):
     # Sort by score in descending order
     queries.sort(key=lambda x: x['score'], reverse=True)
     return queries
-def include_search_across_tables(data, lang_version_tables):
-    queries = []
-    for language, version, table_name in lang_version_tables:
-        table = Data(table_name)
-        stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data.like(f"%{data}%"))
-        query_results = db.session.execute(stmt).fetchall()
-        # Add language and version to each result
-        for result in query_results:
-            queries.append({
-                'id': result.id,
-                'name': result.name,
-                'data': result.data,
-                'path': result.path,
-                'language': language,
-                'version': version
-            })
-    return queries
 
-def exact_search_across_tables(data, lang_version_tables):
-    queries = []
-    for language, version, table_name in lang_version_tables:
-        table = Data(table_name)
-        stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data==(f"{data}"))
-        query_results = db.session.execute(stmt).fetchall()
-        
-        # Add language and version to each result
-        for result in query_results:
-            queries.append({
-                'id': result.id,
-                'name': result.name,
-                'data': result.data,
-                'path': result.path,
-                'language': language,
-                'version': version
-            })
-    return queries
 
 
 class AllVersions(Resource):
@@ -160,10 +125,33 @@ class AllLanguages(Resource):
         return [lang.language for lang in languages]
 
 class VersionsByLanguage(Resource):
-    def get(self, language):
-        versions = Versions.query.filter_by(language=language).all()
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('language', required=True, location='args')
+        args = parser.parse_args()
+        versions = Versions.query.filter_by(language=args['language']).all()
         return [v.version for v in versions]
 
+
+class LatestVersionOfLanguage(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('language', required=True, location='args')
+        args = parser.parse_args()
+        latest_version = db.session.query(
+            Versions.language,
+            func.max(Versions.version).label('latest_version')
+        ).filter_by(language=args['language']).group_by(Versions.language).first()
+
+        if latest_version:
+            # Convert the Row object to a dictionary
+            result = {
+                'language': latest_version.language,
+                'latest_version': latest_version.latest_version
+            }
+            return jsonify(result)  # Use jsonify to return a JSON response
+        else:
+            return {'message': 'No data found'}, 404
 class LatestVersionByLanguage(Resource):
     def get(self):
         latest_versions = db.session.query(Versions.language, func.max(Versions.version)).group_by(Versions.language).all()
@@ -207,17 +195,24 @@ class MultiDataByData(Resource):
         parser.add_argument('version', required=True, location='args')
         parser.add_argument('languages', required=True, location='args')
         parser.add_argument('versions', required=True, location='args')
+        # 添加分页参数
+        parser.add_argument('page', type=int, required=False, default=1, location='args')
+        parser.add_argument('per_page', type=int, required=False, default=10, location='args')
         args = parser.parse_args()
+
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
         table_name = get_table_name(args['language'], args['version'])
         data_table = Data(table_name)
-        data = db.session.query(data_table).filter(text("MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE)")).params(data=args['data']).all()
-        initResults= [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
+
+        # 优化：一次性查询所有初始数据，并应用分页
+        query = db.session.query(data_table).filter(text("MATCH (data) AGAINST (:data IN NATURAL LANGUAGE MODE)")).params(data=args['data'])
+        total = query.count()  # 计算总数据量
+        data = query.paginate(page=args['page'], per_page=args['per_page'], error_out=False).items
+
+        initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
         results = []
-                # 收集所有需要查询的路径和ID
         paths_ids = set((initresult['path'], initresult['id']) for initresult in initResults)
-        # If there are no paths or ids to query, return early
         if not paths_ids:
             return []  # Or return a meaningful message
         # 构建查询映射
@@ -246,7 +241,14 @@ class MultiDataByData(Resource):
             result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
             results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
 
-        return results
+        return {
+            'data': results,
+            'pagination': {
+                'page': args['page'],
+                'per_page': args['per_page'],
+                'total': total,
+            }
+        }
     
 class MultiLanguagesDataByData(Resource):
     def get(self):
@@ -254,44 +256,58 @@ class MultiLanguagesDataByData(Resource):
         parser.add_argument('data', required=True, location='args')
         parser.add_argument('languages', required=True, location='args')
         parser.add_argument('versions', required=True, location='args')
+        # 添加分页参数
+        parser.add_argument('page', type=int, required=False, default=1, location='args')
+        parser.add_argument('per_page', type=int, required=False, default=10, location='args')
         args = parser.parse_args()
+
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
         lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
         initresults = search_across_tables(args['data'], lang_version_tables)
+
+        # 分页处理
+        page = args['page']
+        per_page = args['per_page']
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated_initresults = initresults[start:end]
+
         results = []
-        # 收集所有需要查询的路径和ID
-        paths_ids = set((initresult['path'], initresult['id']) for initresult in initresults)
-        # If there are no paths or ids to query, return early
+        paths_ids = set((initresult['path'], initresult['id']) for initresult in paginated_initresults)
         if not paths_ids:
-            return []  # Or return a meaningful message
-        # 构建查询映射
+            return {'data': [], 'pagination': {'page': page, 'per_page': per_page, 'total': len(initresults)}}
+
         data_mapping = {}
         for language, version in zip(languages, versions):
             table_name = get_table_name(language, version)
             data_table = Data(table_name)
-            # 一次性查询所有相关数据
             all_data = db.session.query(data_table).filter(
-    text("path IN :paths AND id IN :ids")
-).params(
-    paths=[path for path, _ in paths_ids],
-    ids=[id for _, id in paths_ids]
-).all()
-            # 将查询结果存储在映射中
+                text("path IN :paths AND id IN :ids")
+            ).params(
+                paths=[path for path, _ in paths_ids],
+                ids=[id for _, id in paths_ids]
+            ).all()
             for data in all_data:
                 key = (data.path, data.id)
                 if key not in data_mapping:
                     data_mapping[key] = []
                 data_mapping[key].append({'language': language, 'version': version, 'data': data.data})
 
-        # 使用映射填充结果
-        results = []
-        for initresult in initresults:
+        for initresult in paginated_initresults:
             key = (initresult['path'], initresult['id'])
-            result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
-            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
+            result_data = data_mapping.get(key, [])
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': result_data, 'path': initresult['path']})
 
-        return results
+        return {
+            'data': results,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': len(initresults),
+            }
+        }
+
 
 class IncludeMultiDataByData(Resource):
     def get(self):
@@ -301,93 +317,55 @@ class IncludeMultiDataByData(Resource):
         parser.add_argument('version', required=True, location='args')
         parser.add_argument('languages', required=True, location='args')
         parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('page', type=int, required=False, default=1, location='args')
+        parser.add_argument('per_page', type=int, required=False, default=10, location='args')
         args = parser.parse_args()
+
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
         table_name = get_table_name(args['language'], args['version'])
         table = Data(table_name)
+
+        # 分页查询
         stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data.like(f"%{args['data']}%"))
-        data = db.session.execute(stmt).fetchall()
-        initResults= [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
-        results = []
-                # 收集所有需要查询的路径和ID
+        subquery = stmt.subquery()  # Create a subquery and alias it
+        total_query = db.session.execute(select(db.func.count()).select_from(subquery)).scalar()  # Corrected usage
+        data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
+        initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
+
+        if not initResults:
+            return {'data': [], 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total_query}}
+
         paths_ids = set((initresult['path'], initresult['id']) for initresult in initResults)
-        # If there are no paths or ids to query, return early
-        if not paths_ids:
-            return []  # Or return a meaningful message
-        # 构建查询映射
         data_mapping = {}
         for language, version in zip(languages, versions):
             table_name = get_table_name(language, version)
             data_table = Data(table_name)
-            # 一次性查询所有相关数据
             all_data = db.session.query(data_table).filter(
-    text("path IN :paths AND id IN :ids")
-).params(
-    paths=[path for path, _ in paths_ids],
-    ids=[id for _, id in paths_ids]
-).all()
-            # 将查询结果存储在映射中
+                text("path IN :paths AND id IN :ids")
+            ).params(
+                paths=[path for path, _ in paths_ids],
+                ids=[id for _, id in paths_ids]
+            ).all()
             for data in all_data:
                 key = (data.path, data.id)
-                if key not in data_mapping:
-                    data_mapping[key] = []
-                data_mapping[key].append({'language': language, 'version': version, 'data': data.data})
+                data_mapping.setdefault(key, []).append({'language': language, 'version': version, 'data': data.data})
 
-        # 使用映射填充结果
         results = []
         for initresult in initResults:
             key = (initresult['path'], initresult['id'])
-            result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
-            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
+            result_data = data_mapping.get(key, [])
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': result_data, 'path': initresult['path']})
 
-        return results
-
-class IncludeMultiLanguagesDataByData(Resource):
-    def get(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('data', required=True, location='args')
-        parser.add_argument('languages', required=True, location='args')
-        parser.add_argument('versions', required=True, location='args')
-        args = parser.parse_args()
-        languages = args['languages'].split(',')
-        versions = args['versions'].split(',')
-        lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
-        initresults = include_search_across_tables(args['data'], lang_version_tables)
-        results = []
-        # 收集所有需要查询的路径和ID
-        paths_ids = set((initresult['path'], initresult['id']) for initresult in initresults)
-        # If there are no paths or ids to query, return early
-        if not paths_ids:
-            return []  # Or return a meaningful message
-        # 构建查询映射
-        data_mapping = {}
-        for language, version in zip(languages, versions):
-            table_name = get_table_name(language, version)
-            data_table = Data(table_name)
-            # 一次性查询所有相关数据
-            all_data = db.session.query(data_table).filter(
-    text("path IN :paths AND id IN :ids")
-).params(
-    paths=[path for path, _ in paths_ids],
-    ids=[id for _, id in paths_ids]
-).all()
-            # 将查询结果存储在映射中
-            for data in all_data:
-                key = (data.path, data.id)
-                if key not in data_mapping:
-                    data_mapping[key] = []
-                data_mapping[key].append({'language': language, 'version': version, 'data': data.data})
-
-        # 使用映射填充结果
-        results = []
-        for initresult in initresults:
-            key = (initresult['path'], initresult['id'])
-            result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
-            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
-
-        return results
-    
+        return {
+            'data': results,
+            'pagination': {
+                'page': args['page'],
+                'per_page': args['per_page'],
+                'total': total_query
+            }
+        }
+   
 class ExactMultiDataByData(Resource):
     def get(self):
         parser = reqparse.RequestParser()
@@ -396,92 +374,275 @@ class ExactMultiDataByData(Resource):
         parser.add_argument('version', required=True, location='args')
         parser.add_argument('languages', required=True, location='args')
         parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('page', type=int, required=False, default=1, location='args')  # 分页参数
+        parser.add_argument('per_page', type=int, required=False, default=10, location='args')  # 分页参数
         args = parser.parse_args()
+
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
         table_name = get_table_name(args['language'], args['version'])
         table = Data(table_name)
-        stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data==(f"{args['data']}"))
-        data = db.session.execute(stmt).fetchall()
-        initResults= [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
-        results = []
-                # 收集所有需要查询的路径和ID
+
+        # 分页查询
+        stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data == f"{args['data']}")
+        subquery = stmt.subquery()  # 创建子查询并给它一个别名
+        total_query = db.session.execute(select(db.func.count()).select_from(subquery)).scalar()  # 正确的使用方式
+        data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
+        initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
+
+        if not initResults:
+            return {'data': [], 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total_query}}
+
         paths_ids = set((initresult['path'], initresult['id']) for initresult in initResults)
-        # If there are no paths or ids to query, return early
-        if not paths_ids:
-            return []  # Or return a meaningful message
-        # 构建查询映射
         data_mapping = {}
         for language, version in zip(languages, versions):
             table_name = get_table_name(language, version)
             data_table = Data(table_name)
-            # 一次性查询所有相关数据
             all_data = db.session.query(data_table).filter(
-    text("path IN :paths AND id IN :ids")
-).params(
-    paths=[path for path, _ in paths_ids],
-    ids=[id for _, id in paths_ids]
-).all()
-            # 将查询结果存储在映射中
+                text("path IN :paths AND id IN :ids")
+            ).params(
+                paths=[path for path, _ in paths_ids],
+                ids=[id for _, id in paths_ids]
+            ).all()
             for data in all_data:
                 key = (data.path, data.id)
-                if key not in data_mapping:
-                    data_mapping[key] = []
-                data_mapping[key].append({'language': language, 'version': version, 'data': data.data})
+                data_mapping.setdefault(key, []).append({'language': language, 'version': version, 'data': data.data})
 
-        # 使用映射填充结果
         results = []
         for initresult in initResults:
             key = (initresult['path'], initresult['id'])
-            result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
-            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
+            result_data = data_mapping.get(key, [])
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'path': initresult['path'], 'data': result_data})
 
-        return results
-    
+        return {
+            'data': results,
+            'pagination': {
+                'page': args['page'],
+                'per_page': args['per_page'],
+                'total': total_query
+            }
+        }
+
+def include_search_across_tables(data, lang_version_tables, page=1, per_page=10):
+    total_count = 0
+    queries = []
+
+    # 首先计算总记录数
+    for language, version, table_name in lang_version_tables:
+        table = Data(table_name)
+        count_stmt = select(func.count()).select_from(table).where(table.c.data.like(f"%{data}%"))
+        total_count += db.session.execute(count_stmt).scalar()
+
+    total_pages = (total_count + per_page - 1) // per_page
+
+    # 确定从哪个表格开始查询和跳过多少条记录
+    items_to_skip = (page - 1) * per_page
+    items_collected = 0
+
+    for language, version, table_name in lang_version_tables:
+        if items_collected >= per_page:
+            break  # 已收集到足够的条目
+
+        table = Data(table_name)
+        if items_to_skip > 0:
+            # 计算当前表格的记录数
+            count_stmt = select(func.count()).select_from(table).where(table.c.data.like(f"%{data}%"))
+            table_count = db.session.execute(count_stmt).scalar()
+
+            if items_to_skip >= table_count:
+                # 如果需要跳过的条目数大于当前表格的记录数，则跳过这个表格
+                items_to_skip -= table_count
+                continue
+            else:
+                # 调整查询以跳过部分记录
+                stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data.like(f"%{data}%")).limit(per_page - items_collected).offset(items_to_skip)
+                items_to_skip = 0  # 重置跳过的条目数，因为已经开始收集数据
+        else:
+            stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data.like(f"%{data}%")).limit(per_page - items_collected)
+
+        query_results = db.session.execute(stmt).fetchall()
+
+        for result in query_results:
+            queries.append({
+                'id': result.id,
+                'name': result.name,
+                'data': result.data,
+                'path': result.path,
+                'language': language,
+                'version': version
+            })
+            items_collected += 1
+            if items_collected >= per_page:
+                break  # 已收集到足够的条目
+
+    pagination_info = {
+        'total': total_count,
+        'page': page,
+        'per_page': per_page
+    }
+
+    return {
+        'data': queries,
+        'pagination': pagination_info
+    }
+class IncludeMultiLanguagesDataByData(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        # 解析分页参数
+        parser.add_argument('page', type=int, location='args', default=1)
+        parser.add_argument('per_page', type=int, location='args', default=10)
+        args = parser.parse_args()
+
+        languages = args['languages'].split(',')
+        versions = args['versions'].split(',')
+        lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
+
+        # 传递分页参数
+        search_results = include_search_across_tables(args['data'], lang_version_tables, args['page'], args['per_page'])
+        if not search_results['data']:
+            return {'message': 'No data found for the given parameters', 'data': [], 'pagination': search_results['pagination']}
+
+        paths_ids = set((result['path'], result['id']) for result in search_results['data'])
+        data_mapping = {}
+
+        # 构建查询条件
+        conditions = [text(f"path = :path_{i} AND id = :id_{i}") for i, _ in enumerate(paths_ids)]
+        parameters = {**{f"path_{i}": path for i, (path, _) in enumerate(paths_ids)}, **{f"id_{i}": id for i, (_, id) in enumerate(paths_ids)}}
+
+        # 一次性查询所有相关数据
+        union_query = union_all(*[
+            select(*[literal(language).label('language'), literal(version).label('version'), data_table.c.data, data_table.c.path, data_table.c.id])
+            for language, version, table_name in lang_version_tables
+            for data_table in [Data(table_name)]
+        ])
+        subquery = union_query.subquery()
+        all_data_query = select(subquery).where(or_(*conditions))
+        all_data = db.session.execute(all_data_query, parameters).fetchall()
+
+        # 将查询结果存储在映射中
+        for data in all_data:
+            key = (data.path, data.id)
+            data_mapping.setdefault(key, []).append({'language': data.language, 'version': data.version, 'data': data.data})
+
+        # 使用映射填充结果
+        results = []
+        for initresult in search_results['data']:
+            key = (initresult['path'], initresult['id'])
+            result_data = data_mapping.get(key, [])
+            results.append({'id': initresult['id'], 'name': initresult['name'], 'path': initresult['path'], 'data': result_data})
+
+        return {'data': results, 'pagination': search_results['pagination']}
+ 
+def exact_search_across_tables(data, lang_version_tables, page=1, per_page=10):
+    total_count = 0
+    queries = []
+
+    # 首先计算总记录数
+    for language, version, table_name in lang_version_tables:
+        table = Data(table_name)
+        count_stmt = select(func.count()).select_from(table).where(table.c.data == f"{data}")
+        total_count += db.session.execute(count_stmt).scalar()
+
+    total_pages = (total_count + per_page - 1) // per_page
+
+    # 确定从哪个表格开始查询和跳过多少条记录
+    items_to_skip = (page - 1) * per_page
+    items_collected = 0
+
+    for language, version, table_name in lang_version_tables:
+        if items_collected >= per_page:
+            break  # 已收集到足够的条目
+
+        table = Data(table_name)
+        if items_to_skip > 0:
+            # 计算当前表格的记录数
+            count_stmt = select(func.count()).select_from(table).where(table.c.data == f"{data}")
+            table_count = db.session.execute(count_stmt).scalar()
+
+            if items_to_skip >= table_count:
+                # 如果需要跳过的条目数大于当前表格的记录数，则跳过这个表格
+                items_to_skip -= table_count
+                continue
+            else:
+                # 调整查询以跳过部分记录
+                stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data == f"{data}").limit(per_page - items_collected).offset(items_to_skip)
+                items_to_skip = 0  # 重置跳过的条目数，因为已经开始收集数据
+        else:
+            stmt = select(table.c.id, table.c.name, table.c.data, table.c.path).where(table.c.data == f"{data}").limit(per_page - items_collected)
+
+        query_results = db.session.execute(stmt).fetchall()
+
+        for result in query_results:
+            queries.append({
+                'id': result.id,
+                'name': result.name,
+                'data': result.data,
+                'path': result.path,
+                'language': language,
+                'version': version
+            })
+            items_collected += 1
+            if items_collected >= per_page:
+                break  # 已收集到足够的条目
+
+    pagination_info = {
+        'total': total_count,
+        'page': page,
+        'per_page': per_page
+    }
+
+    return {
+        'data': queries,
+        'pagination': pagination_info
+    }
+   
 class ExactMultiLanguagesDataByData(Resource):
     def get(self):
         parser = reqparse.RequestParser()
         parser.add_argument('data', required=True, location='args')
         parser.add_argument('languages', required=True, location='args')
         parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('page', type=int, location='args', default=1)
+        parser.add_argument('per_page', type=int, location='args', default=10)
         args = parser.parse_args()
+
         languages = args['languages'].split(',')
         versions = args['versions'].split(',')
         lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
-        initresults = exact_search_across_tables(args['data'], lang_version_tables)
-        results = []
-                # 收集所有需要查询的路径和ID
-        paths_ids = set((initresult['path'], initresult['id']) for initresult in initresults)
-        # If there are no paths or ids to query, return early
-        if not paths_ids:
-            return []  # Or return a meaningful message
-        # 构建查询映射
+
+        search_results = exact_search_across_tables(args['data'], lang_version_tables, args['page'], args['per_page'])
+        if not search_results['data']:
+            return {'message': 'No data found for the given parameters', 'data': [], 'pagination': search_results['pagination']}
+
+        paths_ids = set((result['path'], result['id']) for result in search_results['data'])
         data_mapping = {}
-        for language, version in zip(languages, versions):
-            table_name = get_table_name(language, version)
-            data_table = Data(table_name)
-            # 一次性查询所有相关数据
-            all_data = db.session.query(data_table).filter(
-    text("path IN :paths AND id IN :ids")
-).params(
-    paths=[path for path, _ in paths_ids],
-    ids=[id for _, id in paths_ids]
-).all()
-            # 将查询结果存储在映射中
-            for data in all_data:
-                key = (data.path, data.id)
-                if key not in data_mapping:
-                    data_mapping[key] = []
-                data_mapping[key].append({'language': language, 'version': version, 'data': data.data})
 
-        # 使用映射填充结果
+        conditions = [text(f"path = :path_{i} AND id = :id_{i}") for i, _ in enumerate(paths_ids)]
+        parameters = {**{f"path_{i}": path for i, (path, _) in enumerate(paths_ids)}, **{f"id_{i}": id for i, (_, id) in enumerate(paths_ids)}}
+
+        union_query = union_all(*[
+            select(*[literal(language).label('language'), literal(version).label('version'), data_table.c.data, data_table.c.path, data_table.c.id])
+            for language, version, table_name in lang_version_tables
+            for data_table in [Data(table_name)]
+        ])
+        subquery = union_query.subquery()
+        all_data_query = select(subquery).where(or_(*conditions))
+        all_data = db.session.execute(all_data_query, parameters).fetchall()
+
+        for data in all_data:
+            key = (data.path, data.id)
+            data_mapping.setdefault(key, []).append({'language': data.language, 'version': data.version, 'data': data.data})
+
         results = []
-        for initresult in initresults:
+        for initresult in search_results['data']:
             key = (initresult['path'], initresult['id'])
-            result_data = data_mapping.get(key, [{'language': language, 'version': version, 'data': f'Data not found for language {language} and version {version}'} for language, version in zip(languages, versions)])
-            results.append({'id': initresult['id'], 'name': initresult['name'], 'data': initresult['data'], 'path': initresult['path'], 'data': result_data})
+            result_data = data_mapping.get(key, [])
+            results.append({'id': initresult['id'], 'name': initresult['name'],  'path': initresult['path'], 'data': result_data})
 
-        return results
+        return {'data': results, 'pagination': search_results['pagination']}
     
 class DataByPath(Resource):
     def get(self):
@@ -573,14 +734,7 @@ SELECT * FROM (
 WHERE id BETWEEN :start_index AND :end_index
 """)
 
-                # 使用SQLAlchemy执行这个查询
                 data_around = db.session.execute(sql_query, {'path': data.path, 'start_index': start_index, 'end_index': end_index}).fetchall()
-
-                #data_around = db.session.query(data_table).filter_by(path=data.path).all()
-                #data_index = data_around.index(data)
-                
-                #start = max(0, data_index - nearrange)
-                #end = data_index + nearrange + 1
                 results.append({'language':language,'version':version,'data':[{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data_around]})
             else:
                 results.append({'error': f'Data not found for language {language} and version {version}'})
@@ -606,12 +760,19 @@ WHERE id BETWEEN :start_index AND :end_index
                     'version': version,
                     'data': data_item['data']
                 })
+        resultList = list(results_by_id.values())
+        return {'data': resultList, 'pagination': {
+                'page': 1,
+                'per_page': len(resultList),
+                'total': len(resultList),
+            }}
         return list(results_by_id.values())
     
 
 api.add_resource(AllVersions, '/versions')
 api.add_resource(AllLanguages, '/languages')
 api.add_resource(VersionsByLanguage, '/versions/<string:language>')
+api.add_resource(LatestVersionOfLanguage, '/latest_version')
 api.add_resource(LatestVersionByLanguage, '/latest_versions')
 api.add_resource(DataByData, '/data_by_data')
 api.add_resource(MultiDataByData, '/multi_data_by_data')
