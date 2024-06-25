@@ -57,6 +57,11 @@
         
       </div>
     </div>
+    <div class="footer-text">
+      <el-divider></el-divider>
+      FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.<br>
+      All content here © SQUARE ENIX
+        </div>
   </el-config-provider>
 </template>
 
@@ -154,10 +159,14 @@ contextFlag.value=true;}
     console.log(tableData.value);
   });
 };
-const handleInputChange = (value: string) => {
+const handleInputChange = (value: string, newSearchFlag: boolean = true) => {
   if(inputValue.value === '' || inputValue.value === null || inputValue.value === undefined ||contextFlag.value===true) {
     return;
   }
+  if (newSearchFlag) {
+  pagination.total= 0;
+  pagination.page= 1;
+  pagination.per_page= 10;}
   const substrings = inputValue.value.split(regex);
   if (selectValue.value === 'all') {
     const searchedLanguages = columns.value.map(column => column.language).join(',');
@@ -213,7 +222,7 @@ const handleInputChange = (value: string) => {
 };
 const handlePageChange = (page: number) => {
   pagination.page = page;
-  handleInputChange(inputValue.value);
+  handleInputChange(inputValue.value, false);
 };
 const handleReturn = () => {
   tableData.value=cacheData.value;
@@ -315,5 +324,11 @@ onMounted(async () => {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+}
+.footer-text {
+  margin-left: 250px;
+  margin-top: 20px;  
+  color: #666;
+  font-size: 14px; 
 }
 </style>
