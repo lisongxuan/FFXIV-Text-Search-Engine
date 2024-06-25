@@ -1,53 +1,72 @@
+// BaseHeader.vue
 <template>
-  <el-menu
-    :default-active=0
-    class="el-menu-demo"
-    mode="horizontal"
-    :ellipsis="false"
-    @select="handleSelect"
-  >
-    <el-menu-item index="0">最终幻想14 文本搜索器</el-menu-item>
-    <div class="flex-grow" />
-    <el-menu-item h="full" @click="toggleDark()">
-      <button
-        class="border-none w-full bg-transparent cursor-pointer"
-        style="height: var(--ep-menu-item-height)"
-      >
-        <i inline-flex i="dark:ep-moon ep-sunny" />
-      </button>
-    </el-menu-item>
-    
-    <el-sub-menu index="2">
-      <template #title>关于</template>
-      <el-menu-item index="2-1" >
-  开发：Selini@神拳痕
-</el-menu-item>
+  <div class="menus-container"> 
+    <el-menu
+      class="el-menu-demo"
+      mode="horizontal"
+      :ellipsis="false"
+    >
+      <el-menu-item index="0" :to="{ path: '/' }">最终幻想14 文本搜索器</el-menu-item>
+    </el-menu>
 
-      <el-menu-item index="2-2"><a href="https://github.com/lisongxuan/FFXIV-text-search-engine" target="_blank" class="github-link" style="display: block; width: 100%; height: 100%;">
-    GitHub Repository
-  </a></el-menu-item>
-<el-menu-item index="2-3" @click="copyToClipboard('selini141414@gmail.com')">
-        反馈邮箱（建议，点击复制）
+    <el-menu
+      :default-active="'include'"
+      class="el-menu-demo flex-grow"
+      mode="horizontal"
+      :ellipsis="false"
+      @select="handleSelect"
+    >
+      <el-menu-item index="include">部分搜索</el-menu-item>
+      <el-menu-item index="similar">相似搜索</el-menu-item>
+      <el-menu-item index="exact">精确搜索</el-menu-item>
+      <el-menu-item disabled index="advanced">高级搜索</el-menu-item>
+    </el-menu>
+
+    <el-menu
+      class="el-menu-demo"
+      mode="horizontal"
+      :ellipsis="false"
+    >
+      <div class="flex-grow" />
+      <el-menu-item h="full" @click="toggleDark()">
+        <button
+          class="border-none w-full bg-transparent cursor-pointer"
+          style="height: var(--ep-menu-item-height)"
+        >
+          <i inline-flex i="dark:ep-moon ep-sunny" />
+        </button>
       </el-menu-item>
-<el-menu-item index="2-4" @click="copyToClipboard('719279154')">
-        反馈QQ（点击复制）
-      </el-menu-item>
-      <el-menu-item index="2-5">
-        更新日志
-      </el-menu-item>
-    </el-sub-menu>
-  </el-menu>
+      
+      <el-sub-menu index="2">
+        <template #title>关于</template>
+        <el-menu-item index="2-1">开发：Selini@神拳痕</el-menu-item>
+        <el-menu-item index="2-2">
+          <a href="https://github.com/lisongxuan/FFXIV-text-search-engine" target="_blank" class="github-link">
+            GitHub Repository
+          </a>
+        </el-menu-item>
+        <el-menu-item index="2-3" @click="copyToClipboard('selini141414@gmail.com')">
+          反馈邮箱（建议，点击复制）
+        </el-menu-item>
+        <el-menu-item index="2-4" @click="copyToClipboard('719279154')">
+          反馈QQ（点击复制）
+        </el-menu-item>
+        <el-menu-item index="2-5">更新日志</el-menu-item>
+      </el-sub-menu>
+    </el-menu>
+  </div>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { ref, inject, Ref } from 'vue'
 import { ElMessage } from 'element-plus';
 import { toggleDark } from '~/composables';
 
-const handleSelect = (key: string, keyPath: string[]) => {
-  // 处理选择事件
-}
+const selected = inject<Ref<string>>('headerSelected', ref('include'))
 
+const handleSelect = (key: string, keyPath: string[]) => {
+  selected.value = key
+}
 
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
@@ -80,4 +99,9 @@ const copyToClipboard = (text: string) => {
   align-items: center; /* 垂直居中 */
   justify-content: center; /* 水平居中 */
 }
+.menus-container {
+  display: flex; 
+  justify-content: space-between; 
+}
+
 </style>
