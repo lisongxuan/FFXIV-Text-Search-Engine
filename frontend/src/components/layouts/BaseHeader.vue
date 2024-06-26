@@ -6,7 +6,11 @@
       mode="horizontal"
       :ellipsis="false"
     >
-      <el-menu-item index="0" :to="{ path: '/' }">最终幻想14 文本搜索器</el-menu-item>
+    <el-menu-item index="0" :to="{ path: '/' }">
+  <img src="/favicon.png" v-if="!isDark" style="width: 100%; height: 100%; margin-right: 8px;">
+  <img src="/favicon-dark.png" v-else style="width: 100%; height: 100%; margin-right: 8px;" >
+  最终幻想14 文本搜索器
+</el-menu-item>
     </el-menu>
 
     <el-menu
@@ -16,10 +20,27 @@
       :ellipsis="false"
       @select="handleSelect"
     >
-      <el-menu-item index="include">部分搜索</el-menu-item>
-      <el-menu-item index="similar">相似搜索</el-menu-item>
-      <el-menu-item index="exact">精确搜索</el-menu-item>
-      <el-menu-item disabled index="advanced">高级搜索</el-menu-item>
+    <el-tooltip
+        class="box-item"
+        effect="dark"
+        content="部分搜索：搜索结果包含输入内容"
+        placement="bottom-start"
+      >
+      <el-menu-item index="include">部分搜索</el-menu-item></el-tooltip>
+      <el-tooltip
+        class="box-item"
+        effect="dark"
+        content="相似搜索：搜索结果包含输入内容的相似内容"
+        placement="bottom-start"
+      >
+      <el-menu-item index="similar">相似搜索</el-menu-item></el-tooltip>
+      <el-tooltip
+        class="box-item"
+        effect="dark"
+        content="精确搜索：搜索结果与输入内容完全匹配"
+        placement="bottom-start"
+      >
+      <el-menu-item index="exact">精确搜索</el-menu-item></el-tooltip>
     </el-menu>
 
     <el-menu
@@ -28,6 +49,14 @@
       :ellipsis="false"
     >
       <div class="flex-grow" />
+      <el-menu-item h="full"  @click="dialogFormVisible = true">
+        <button
+          class="border-none w-full bg-transparent cursor-pointer"
+          style="height: var(--ep-menu-item-height)"
+        > 
+          <i inline-flex i="ep-setting" />
+        </button>
+      </el-menu-item>
       <el-menu-item h="full" @click="toggleDark()">
         <button
           class="border-none w-full bg-transparent cursor-pointer"
@@ -51,7 +80,13 @@
         <el-menu-item index="2-4" @click="copyToClipboard('719279154')">
           反馈QQ（点击复制）
         </el-menu-item>
-        <el-menu-item index="2-5">更新日志</el-menu-item>
+        <el-tooltip
+        class="box-item"
+        effect="dark"
+        content="暂无更新日志"
+        placement="bottom-start"
+      >
+        <el-menu-item index="2-5" disabled>更新日志</el-menu-item></el-tooltip>
       </el-sub-menu>
     </el-menu>
   </div>
@@ -60,14 +95,14 @@
 <script lang="ts" setup>
 import { ref, inject, Ref } from 'vue'
 import { ElMessage } from 'element-plus';
-import { toggleDark } from '~/composables';
+import { toggleDark ,isDark} from '~/composables';
+import Setting from 'path/to/Setting.vue'; // Import the Setting component
 
 const selected = inject<Ref<string>>('headerSelected', ref('include'))
-
+const dialogFormVisible = inject<Ref<Boolean>>('dialogFormVisible', ref(false))
 const handleSelect = (key: string, keyPath: string[]) => {
   selected.value = key
 }
-
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
     // 使用 ElMessage 显示复制成功的提示

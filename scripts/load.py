@@ -46,8 +46,8 @@ if cursor.fetchone() is None:
         PRIMARY KEY (id, path)
     )
     """)
-sql = f"ALTER TABLE {table_name} ADD FULLTEXT(data)"
-cursor.execute(sql)
+    # Now, add the FULLTEXT index in a separate statement
+    cursor.execute(f"ALTER TABLE {table_name} ADD FULLTEXT(data) WITH PARSER ngram")
 
 cursor.execute("SHOW TABLES LIKE 'versions'")
 if cursor.fetchone() is None:
