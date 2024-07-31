@@ -68,7 +68,7 @@
       
       <el-sub-menu index="2">
         <template #title>关于</template>
-        <el-menu-item index="2-1">开发：Selini@神拳痕</el-menu-item>
+        <el-menu-item index="2-1"><a href="https://arkady14.me" target="_blank" class="github-link">开发：Selini@神拳痕</a></el-menu-item>
         <el-menu-item index="2-2">
           <a href="https://github.com/lisongxuan/FFXIV-text-search-engine" target="_blank" class="github-link">
             GitHub Repository
