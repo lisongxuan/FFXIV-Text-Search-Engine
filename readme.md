@@ -6,7 +6,7 @@
 
 ### 特性
 
-- 支持相似，模糊，精确三种搜索方式
+- 支持部分，相似，精确三种搜索方式
 - 支持自定义搜索版本
 - 支持自定义搜索语言
 - 支持跨版本搜索对比
@@ -21,15 +21,15 @@
 
 ## Final Fantasy XIV Text Searcher
 
-Search for story/dialogue texts in the game, a lame imitation of [https://strings.wakingsands.com/](https://strings.wakingsands.com/).
+A tool for searching various story/dialogue texts in the game, a lame imitation of [https://strings.wakingsands.com/](https://strings.wakingsands.com/).
 
 ### Features
 
-- Supports similar, fuzzy, and precise search methods
-- Supports custom search versions
+- Supports partial, similar, and exact search methods
+- Allows custom search versions
 - Supports custom search languages
-- Supports cross-version search
+- Enables cross-version search
 
-### Deployment Address
+### Deployment
 
 [https://ffxivtext.arkady14.me/](https://ffxivtext.arkady14.me/)
