@@ -13,22 +13,20 @@
             style="width: 240px"
             @change="handleInputChange"
           >
-          <div v-for="item in options">
-          <el-tooltip
-          v-if="item.value === 'all'"
-        class="box-item"
-        effect="dark"
-        content="搜索所有语言，可能导致运行缓慢，请谨慎使用"
-        placement="top"
-      >
-            <el-option
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-tooltip>
-          <el-option v-else
-              :key="item.value"
+          <div v-for="item in options" :key="item.value">
+            <el-tooltip
+              v-if="item.value === 'all'"
+              class="box-item"
+              effect="dark"
+              :content="$t('app.searchAll')"
+              placement="top"
+            >
+              <el-option
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-tooltip>
+            <el-option v-else
               :label="item.label"
               :value="item.value"
             />
@@ -37,13 +35,13 @@
           <el-input
             v-model="inputValue"
             size="large"
-            placeholder="请输入搜索内容"
+            :placeholder="$t('app.jumpIntoContent')"
             clearable
             :suffix-icon="Search"
             @input="handleInputChange"
           />
         </div>
-        <el-button v-if="contextFlag" @click="handleReturn()" type="primary" style="margin: 10px;">返回搜索</el-button>
+        <el-button v-if="contextFlag" @click="handleReturn()" type="primary" style="margin: 10px;">{{$t('app.returnSearch')}}</el-button>
         <el-pagination
           background
           layout="prev, pager, next"
@@ -57,7 +55,7 @@
           <el-table-column label="位置" width="180">
             <template #default="{ row }">
               <div>{{ row.position }}</div>
-              <el-button size="small" @click="goToContext(row)">跳转至上下文</el-button>
+              <el-button size="small" @click="goToContext(row)">{{$t('app.jumpIntoContent')}}</el-button>
             </template>
           </el-table-column>
           <el-table-column
@@ -77,8 +75,8 @@
       FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.<br>
       All contents here © SQUARE ENIX
     </div>
-    <el-dialog v-model="dialogFormVisible" title="设置" width="500">
-      <h3>语言/版本设置</h3>
+    <el-dialog v-model="dialogFormVisible"  width="500":title="$t('app.setting')">
+      <h3>{{$t('app.languageSetting')}}</h3>
       <div v-for="(item, index) in allVersions" :key="index">
       <h4>{{ languages[item.language] }}</h4>
       <el-checkbox-group v-model="tempSelectedVersions[item.language]">
@@ -91,20 +89,20 @@
         </el-checkbox>
       </el-checkbox-group>
     </div>
-    <h4>默认搜索语言</h4>
+    <h4>{{$t('app.defaultLanguage')}}</h4>
     <el-cascader v-model="tempDefaultLanguage" :options="languageOptions" />
     <el-divider></el-divider>
-    <h3>显示设置</h3>
-    <h4>每页数据条数</h4>
+    <h3>{{$t('app.displaySetting')}}</h3>
+    <h4>{{$t('app.dataPerPage')}}</h4>
     <el-input-number v-model="tempPaginationNumber" :min="2" :max="50" />
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogFormVisible = false">取消</el-button>
-          <el-button type="primary" @click="dialogFormVisible = false, handleConfirm()">确认</el-button>
+          <el-button @click="dialogFormVisible = false">{{$t('app.cancel')}}</el-button>
+          <el-button type="primary" @click="dialogFormVisible = false, handleConfirm()">{{$t('app.confirm')}}</el-button>
         </div>
       </template>
       <el-divider></el-divider>
-      <h5>*所有设置均用Cookies存储，更改设置视为同意使用Cookies</h5>
+      <h5>{{$t('app.cookieConsent')}}</h5>
     </el-dialog>
   </el-config-provider>
 </template>
@@ -116,6 +114,16 @@ import { Search } from '@element-plus/icons-vue'
 import config from './config.json';
 import { ca } from 'element-plus/es/locale';
 import Cookies from 'js-cookie';
+import { useI18n } from 'vue-i18n';
+const { t ,locale} = useI18n();
+onMounted(() => {
+  const storedPageLanguage = Cookies.get('pageLanguage');
+      if (storedPageLanguage) {
+        locale.value = JSON.parse(storedPageLanguage);
+      }
+  document.title = t('header.title');
+  
+});
 const headerSelected = ref('include');
 provide('headerSelected', headerSelected);
 const dialogFormVisible = ref(false);
@@ -157,13 +165,14 @@ const inputValue = ref('')
 const versions = ref([]);
 const latestVersions = ref<{ [key: string]: string }[]>([]);
 const languages: { [key: string]: string } = reactive({
-  'en': '英语',
-  'jp': '日语',
-  'cn': '中文',
-  'de': '德语',
-  'fr': '法语',
-  'kr': '韩语'
+  'en': t('app.en'),
+  'jp': t('app.jp'),
+  'cn': t('app.cn'),
+  'de': t('app.de'),
+  'fr': t('app.fr'),
+  'kr': t('app.kr')
 });
+
 var selectedVersions = ref<{ [key: string]: string; }[]>([]);
 const tableData = ref<string[][]>([]);
 const cacheRow = ref<RowType>();
@@ -201,11 +210,21 @@ watch(paginationNumber, (newValue) => {
     watch(defaultLanguage, (newValue) => {
       Cookies.set('defaultLanguage', JSON.stringify(newValue), { expires: 7 }); // cookies有效期为7天
     });
+    watch(locale, () => {
+  languages.en = t('app.en');
+  languages.jp = t('app.jp');
+  languages.cn = t('app.cn');
+  languages.de = t('app.de');
+  languages.fr = t('app.fr');
+  languages.kr = t('app.kr');
+});
+
 // 使用计算属性来动态生成options
 const options = computed(() => [
-  { value: 'all', label: '全部语言' },
+  { value: 'all', label: t('app.allLanguages') },
   ...columns.value.map(column => ({ value: column.text, label: `${column.text}` }))
 ]);
+
 interface RowType {
   position: string; 
   [key: string]: any; 
@@ -464,6 +483,7 @@ const storedDefaultLanguage = Cookies.get('defaultLanguage');
         defaultLanguage.value = JSON.parse(storedDefaultLanguage);
         tempDefaultLanguage.value = JSON.parse(storedDefaultLanguage);
       }
+
       const storedSelectedVersions = Cookies.get('selectedVersions');
       if (storedSelectedVersions) {
         selectedVersions.value = JSON.parse(storedSelectedVersions);

@@ -9,7 +9,7 @@
     <el-menu-item index="0" :to="{ path: '/' }">
   <img src="/favicon.png" v-if="!isDark" style="width: 100%; height: 100%; margin-right: 8px;">
   <img src="/favicon-dark.png" v-else style="width: 100%; height: 100%; margin-right: 8px;" >
-  最终幻想14 文本搜索器
+  {{  $t('header.title') }}
 </el-menu-item>
     </el-menu>
 
@@ -23,24 +23,24 @@
     <el-tooltip
         class="box-item"
         effect="dark"
-        content="部分搜索：搜索结果包含输入内容"
+        :content="$t('header.partialDesc')"
         placement="bottom-start"
       >
-      <el-menu-item index="include">部分搜索</el-menu-item></el-tooltip>
+      <el-menu-item index="include">{{$t('header.partial')}}</el-menu-item></el-tooltip>
       <el-tooltip
         class="box-item"
         effect="dark"
-        content="相似搜索：搜索结果包含输入内容的相似内容"
+        :content="$t('header.similarDesc')"
         placement="bottom-start"
       >
-      <el-menu-item index="similar">相似搜索</el-menu-item></el-tooltip>
+      <el-menu-item index="similar">{{$t('header.similar')}}</el-menu-item></el-tooltip>
       <el-tooltip
         class="box-item"
         effect="dark"
-        content="精确搜索：搜索结果与输入内容完全匹配"
+        :content="$t('header.exactDesc')"
         placement="bottom-start"
       >
-      <el-menu-item index="exact">精确搜索</el-menu-item></el-tooltip>
+      <el-menu-item index="exact">{{$t('header.exact')}}</el-menu-item></el-tooltip>
     </el-menu>
 
     <el-menu
@@ -49,6 +49,13 @@
       :ellipsis="false"
     >
       <div class="flex-grow" />
+      <el-sub-menu index="3">
+        <template #title>
+        <svg preserveAspectRatio="xMidYMid meet" viewBox="0 0 24 24" width="1.2em" height="1.2em" data-v-63d067da=""><path fill="currentColor" d="m18.5 10l4.4 11h-2.155l-1.201-3h-4.09l-1.199 3h-2.154L16.5 10h2zM10 2v2h6v2h-1.968a18.222 18.222 0 0 1-3.62 6.301a14.864 14.864 0 0 0 2.336 1.707l-.751 1.878A17.015 17.015 0 0 1 9 13.725a16.676 16.676 0 0 1-6.201 3.548l-.536-1.929a14.7 14.7 0 0 0 5.327-3.042A18.078 18.078 0 0 1 4.767 8h2.24A16.032 16.032 0 0 0 9 10.877a16.165 16.165 0 0 0 2.91-4.876L2 6V4h6V2h2zm7.5 10.885L16.253 16h2.492L17.5 12.885z"></path></svg>
+      </template>
+        <el-menu-item index="3-1" @click="selectLanguage('zh')">中文</el-menu-item>
+        <el-menu-item index="3-2" @click="selectLanguage('en')">English</el-menu-item>
+    </el-sub-menu>
       <el-menu-item h="full"  @click="dialogFormVisible = true">
         <button
           class="border-none w-full bg-transparent cursor-pointer"
@@ -67,26 +74,26 @@
       </el-menu-item>
       
       <el-sub-menu index="2">
-        <template #title>关于</template>
-        <el-menu-item index="2-1"><a href="https://arkady14.me" target="_blank" class="github-link">开发：Selini@神拳痕</a></el-menu-item>
+        <template #title>{{$t('header.about')}}</template>
+        <el-menu-item index="2-1"><a href="https://arkady14.me" target="_blank" class="github-link">{{$t('header.author')}}</a></el-menu-item>
         <el-menu-item index="2-2">
           <a href="https://github.com/lisongxuan/FFXIV-text-search-engine" target="_blank" class="github-link">
-            GitHub Repository
+            {{$t('header.github')}}
           </a>
         </el-menu-item>
         <el-menu-item index="2-3" @click="copyToClipboard('selini141414@gmail.com')">
-          反馈邮箱（建议，点击复制）
+          {{$t('header.contactmail')}}
         </el-menu-item>
         <el-menu-item index="2-4" @click="copyToClipboard('719279154')">
-          反馈QQ（点击复制）
+          {{$t('header.contactqq')}}
         </el-menu-item>
         <el-tooltip
         class="box-item"
         effect="dark"
-        content="暂无更新日志"
+        :content="$t('header.temporary')"
         placement="bottom-start"
       >
-        <el-menu-item index="2-5" disabled>更新日志</el-menu-item></el-tooltip>
+        <el-menu-item index="2-5" disabled>{{$t('header.updatelog')}}</el-menu-item></el-tooltip>
       </el-sub-menu>
     </el-menu>
   </div>
@@ -97,7 +104,9 @@ import { ref, inject, Ref } from 'vue'
 import { ElMessage } from 'element-plus';
 import { toggleDark ,isDark} from '~/composables';
 import Setting from 'path/to/Setting.vue'; // Import the Setting component
-
+import { useI18n } from 'vue-i18n';
+import Cookies from 'js-cookie';
+const { t ,locale} = useI18n();
 const selected = inject<Ref<string>>('headerSelected', ref('include'))
 const dialogFormVisible = inject<Ref<Boolean>>('dialogFormVisible', ref(false))
 const handleSelect = (key: string, keyPath: string[]) => {
@@ -107,19 +116,28 @@ const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
     // 使用 ElMessage 显示复制成功的提示
     ElMessage({
-      message: '复制成功',
+      message: t('header.copysuccess'),
       type: 'success',
       duration: 3000, // 持续时间，单位毫秒
     });
   }).catch(err => {
     // 使用 ElMessage 显示复制失败的提示
     ElMessage.error({
-      message: '复制失败',
+      message: t('header.copyfail'),
       duration: 3000, // 持续时间，单位毫秒
     });
-    console.error('复制失败', err);
+    console.error(t('header.copyfail'), err);
   });
 
+}
+const selectLanguage = (lang: string) => {
+  locale.value = lang;
+  Cookies.set('pageLanguage', JSON.stringify(lang), { expires: 7 }); // cookies有效期为7天
+  ElMessage({
+      message: t('header.selectlanguagesuccess'),
+      type: 'success',
+      duration: 6000, // 持续时间，单位毫秒
+    });
 }
 </script>
 
