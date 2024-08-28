@@ -1,4 +1,4 @@
-// BaseHeader.vue
+// EmptyHeader.vue
 <template>
   <div class="menus-container"> 
     <el-menu
@@ -12,37 +12,7 @@
   {{  $t('header.title') }}
 </el-menu-item>
     </el-menu>
-
-    <el-menu
-      :default-active="'include'"
-      class="el-menu-demo flex-grow"
-      mode="horizontal"
-      :ellipsis="false"
-      @select="handleSelect"
-    >
-    <el-tooltip
-        class="box-item"
-        effect="dark"
-        :content="$t('header.partialDesc')"
-        placement="bottom-start"
-      >
-      <el-menu-item index="include">{{$t('header.partial')}}</el-menu-item></el-tooltip>
-      <el-tooltip
-        class="box-item"
-        effect="dark"
-        :content="$t('header.similarDesc')"
-        placement="bottom-start"
-      >
-      <el-menu-item index="similar">{{$t('header.similar')}}</el-menu-item></el-tooltip>
-      <el-tooltip
-        class="box-item"
-        effect="dark"
-        :content="$t('header.exactDesc')"
-        placement="bottom-start"
-      >
-      <el-menu-item index="exact">{{$t('header.exact')}}</el-menu-item></el-tooltip>
-    </el-menu>
-<MainManu/>
+    <MainManu />
   </div>
 </template>
 

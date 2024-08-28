@@ -38,6 +38,31 @@ const en = {
         fr:"French",
         kr:"Korean",
         allLanguages:"All Languages",
+    },
+    updateLog:{
+        title:"Update Log",
+        pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
+        content:[
+            {
+                version:"1.1.0",
+                date:"2024-08-28",
+                detail:[
+                    "1. Added multi-language support",
+                    "2. Added update log",
+                ]
+            },
+            {
+                version:"1.0.0",
+                date:"2024-08-02",
+                detail:[
+                    "1. Basic functions implemented",
+                    "2. Supported partial search, similar search, exact search",
+                    "3. Supported setting default language, data per page",
+                    "4. Supported storing settings with Cookies",
+                    "5. Supported custom search version, supported comparison between versions",
+                ]
+            }
+        ]
     }
 }
 export default en;
