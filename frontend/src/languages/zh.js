@@ -45,6 +45,13 @@ const zh = {
         pageTitle:"更新日志 - 最终幻想14 文本搜索器",
         content:[
             {
+                version:"1.1.1",
+                date:"2024-09-18",
+                detail:[
+                    "1.修正了更新日志显示不正常的问题",
+                ]
+            },
+            {
                 version:"1.1.0",
                 date:"2024-08-28",
                 detail:[

@@ -62,4 +62,12 @@ export default defineConfig({
       ]
     }),
   ],
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        log: 'log.html'
+      }
+    }
+  }
 })

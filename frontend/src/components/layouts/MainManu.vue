@@ -46,9 +46,9 @@
           {{$t('header.contactqq')}}
         </el-menu-item>
         
-      <el-menu-item index="2-5">
-        <a :href="$router.resolve({ path: '/log' }).href" target="_blank" class="github-link">{{$t('header.updatelog')}}</a>
-      </el-menu-item>
+        <el-menu-item index="2-5">
+          <a href="/log.html" target="_blank" class="github-link">{{$t('header.updatelog')}}</a>
+        </el-menu-item>
       </el-sub-menu>
     </el-menu>
 

@@ -44,6 +44,13 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.1.1",
+                date:"2024-09-18",
+                detail:[
+                    "1.Fixed the issue that the update log is displayed abnormally",
+                ]
+            },
+            {
                 version:"1.1.0",
                 date:"2024-08-28",
                 detail:[

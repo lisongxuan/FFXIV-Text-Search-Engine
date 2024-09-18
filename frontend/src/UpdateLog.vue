@@ -3,7 +3,8 @@ import { ref, reactive, onMounted, computed, provide, watch } from 'vue'
 import { ElMessage } from "element-plus";
 import { useI18n } from 'vue-i18n';
 import Cookies from 'js-cookie';
-const { t ,locale} = useI18n();
+
+const { t, locale } = useI18n();
 defineProps<{ msg: string }>();
 
 onMounted(() => {
@@ -23,12 +24,11 @@ onMounted(() => {
         <h1 color="$ep-color-primary">{{$t('updateLog.title')}}</h1>
       </div>
       <div v-for="log in $tm('updateLog.content')" :key="log.version" :timestamp="log.date" placement="top">
-            <h3>{{ log.version }}</h3>
-            <h4>{{ log.date }}</h4>
-              <p v-for="detail in log.detail" :key="detail">{{ detail }}</p>
-              <div style="height: 20px;"></div>
+        <h3>{{ log.version }}</h3>
+        <h4>{{ log.date }}</h4>
+        <p v-for="detail in log.detail" :key="detail">{{ detail }}</p>
+        <div style="height: 20px;"></div>
       </div>
-
     </div>
   </el-config-provider>
 </template>
