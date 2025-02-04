@@ -28,7 +28,7 @@ const i18n = createI18n({
     legacy: false
 })
 
-const app = createApp(Home);
+const app = createApp(App);
 app.use(router);
 app.use(i18n);
 // app.use(ElementPlus);

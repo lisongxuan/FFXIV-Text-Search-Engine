@@ -33,7 +33,7 @@
       
       <el-sub-menu index="2">
         <template #title>{{$t('header.about')}}</template>
-        <el-menu-item index="2-1"><a href="https://arkady14.me" target="_blank" class="github-link">{{$t('header.author')}}</a></el-menu-item>
+        <el-menu-item index="2-1"><a href="https://arkady14.fun" target="_blank" class="github-link">{{$t('header.author')}}</a></el-menu-item>
         <el-menu-item index="2-2">
           <a href="https://github.com/lisongxuan/FFXIV-text-search-engine" target="_blank" class="github-link">
             {{$t('header.github')}}
@@ -47,7 +47,7 @@
         </el-menu-item>
         
         <el-menu-item index="2-5">
-          <a href="/log.html" target="_blank" class="github-link">{{$t('header.updatelog')}}</a>
+          <router-link :to="{ path: '/log' }" class="github-link"> {{$t('header.updatelog')}}</router-link>
         </el-menu-item>
       </el-sub-menu>
     </el-menu>

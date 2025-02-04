@@ -44,6 +44,29 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.1.4",
+                date:"2025-02-04",
+                detail:[
+                    "1. Migrated server",
+                    "2. Updated personal links",
+                    "3. Fixed link structure",
+                ]
+            },
+            {
+                version:"1.1.3",
+                date:"2024-09-25",
+                detail:[
+                    "1. Added Chinese 7.0 version text",
+                ]  
+            },
+            {
+                version:"1.1.2",
+                date:"2024-09-21",
+                detail:[
+                    "1. Updated Chinese 6.58, English 7.05 and Japanese 7.05 version text",
+                ]
+            },
+            {
                 version:"1.1.1",
                 date:"2024-09-18",
                 detail:[

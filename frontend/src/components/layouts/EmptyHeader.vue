@@ -6,11 +6,13 @@
       mode="horizontal"
       :ellipsis="false"
     >
-    <el-menu-item index="0" :to="{ path: '/' }">
-  <img src="/favicon.png" v-if="!isDark" style="width: 100%; height: 100%; margin-right: 8px;">
-  <img src="/favicon-dark.png" v-else style="width: 100%; height: 100%; margin-right: 8px;" >
-  {{  $t('header.title') }}
-</el-menu-item>
+    <router-link :to="{ path: '/' }" class="github-link">
+      <el-menu-item index="0">
+        <img src="/favicon.png" v-if="!isDark" style="width: 100%; height: 100%; margin-right: 8px;">
+        <img src="/favicon-dark.png" v-else style="width: 100%; height: 100%; margin-right: 8px;" >
+        {{  $t('header.title') }}
+      </el-menu-item>
+    </router-link>
     </el-menu>
     <MainManu />
   </div>
@@ -27,7 +29,7 @@ const { t ,locale} = useI18n();
 const selected = inject<Ref<string>>('headerSelected', ref('include'))
 const dialogFormVisible = inject<Ref<Boolean>>('dialogFormVisible', ref(false))
 const handleSelect = (key: string, keyPath: string[]) => {
-  selected.value = key
+  selected.value = keyw
 }
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {

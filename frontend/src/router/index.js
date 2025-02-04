@@ -1,13 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import Home from '../Home.vue';
-import App from '../App.vue'; 
 import UpdateLog from '../UpdateLog.vue'; 
 
 const routes = [
   {
     path: '/',
-    name: 'App',
-    component: App
+    name: 'Home',
+    component: Home
   },
   {
     path: '/log',
