@@ -14,7 +14,7 @@
 
 ### 部署地址
 
-[https://ffxivtext.arkady14.me/](https://ffxivtext.arkady14.me/)
+[https://ffxivtext.arkady14.tech/](https://ffxivtext.arkady14.tech/)
 
 *部署在最便宜的服务器上，速度就莫期待了:)
 
