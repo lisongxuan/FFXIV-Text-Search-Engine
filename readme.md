@@ -35,6 +35,6 @@ A tool for searching various story/dialogue texts in the game, a lame imitation 
 
 ### Deployment
 
-[https://ffxivtext.arkady14.me/](https://ffxivtext.arkady14.me/)
+[https://ffxivtext.arkady14.tech/](https://ffxivtext.arkady14.tech/)
 
 Hosted on the cheapest server, so don't expect any performance :)
