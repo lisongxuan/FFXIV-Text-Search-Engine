@@ -44,6 +44,14 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.1.5",
+                date:"2025-10-12",
+                detail:[
+                    "1. Updated text data of Chinese 7.3, English 7.35 and Japanese 7.25, including previous versions",
+                    "2. Backend Optimization: Optimized data import performance",
+                ]
+            },
+            {
                 version:"1.1.4",
                 date:"2025-02-04",
                 detail:[
