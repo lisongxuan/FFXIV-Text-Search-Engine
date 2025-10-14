@@ -44,6 +44,13 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.1.6",
+                date:"2025-10-14",
+                detail:[
+                    "1.Fixed the issue of incorrect version sorting"
+                ]
+            },
+            {
                 version:"1.1.5",
                 date:"2025-10-12",
                 detail:[

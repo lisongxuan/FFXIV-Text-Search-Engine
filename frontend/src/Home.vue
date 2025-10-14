@@ -437,16 +437,23 @@ const organizeVersion = (data: Version[]): OrganizedVersion[] => {
   }, []);
 
   result.forEach(language => {
-    language.versions.sort((a, b) => {
-      const aParts = a.split('.').map(Number);
-      const bParts = b.split('.').map(Number);
-      for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-        if ((bParts[i] || 0) > (aParts[i] || 0)) return 1;
-        if ((bParts[i] || 0) < (aParts[i] || 0)) return -1;
-      }
-      return 0;
-    });
+  language.versions.sort((a, b) => {
+    const parseVersion = (version: string): number[] => {
+      return version.split('.').flatMap(part => 
+        part.split('').map(Number)  
+      );
+    };
+  
+    const aParts = parseVersion(a);
+    const bParts = parseVersion(b);
+  
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      if ((bParts[i] || 0) > (aParts[i] || 0)) return 1;
+      if ((bParts[i] || 0) < (aParts[i] || 0)) return -1;
+    }
+    return 0;
   });
+});
   result.sort((a, b) => {
     if (a.language === defaultLanguage.value) return -1;
     if (b.language === defaultLanguage.value) return 1;
