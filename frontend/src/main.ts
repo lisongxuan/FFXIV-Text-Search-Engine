@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n';
 import en from './languages/en';
 import zh from './languages/zh';
 import router from './router';
+import config from './config';
 // import "~/styles/element/index.scss";
 
 // import ElementPlus from "element-plus";
@@ -18,6 +19,15 @@ import "uno.css";
 
 // If you want to use ElMessage, import it.
 import "element-plus/theme-chalk/src/message.scss";
+
+if (config.umamiScriptSrc) {
+  const script = document.createElement('script');
+  script.src = config.umamiScriptSrc;
+  script.setAttribute('data-website-id', config.umamiScriptdata);
+  script.async = true;
+  document.head.appendChild(script);
+}
+
 const messages = {
     en,
     zh

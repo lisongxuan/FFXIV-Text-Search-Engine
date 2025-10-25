@@ -8,6 +8,16 @@ import zh from './languages/zh';
 import "element-plus/theme-chalk/src/message.scss";
 import "~/styles/index.scss";
 import "uno.css";
+import config from './config';
+
+if (config.umamiScriptSrc) {
+  const script = document.createElement('script');
+  script.src = config.umamiScriptSrc;
+  script.setAttribute('data-website-id', config.umamiScriptdata);
+  script.async = true;
+  document.head.appendChild(script);
+}
+
 const messages = {
     en,
     zh
