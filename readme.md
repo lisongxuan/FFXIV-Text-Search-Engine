@@ -14,7 +14,7 @@
 
 ### 部署地址
 
-[https://ffxivtext.arkady14.tech/](https://ffxivtext.arkady14.tech/)
+[https://ffxivtext.arkady14.site/](https://ffxivtext.arkady14.site/)
 
 *部署在最便宜的服务器上，速度就莫期待了:)
 
@@ -35,6 +35,6 @@ A tool for searching various story/dialogue texts in the game, a lame imitation 
 
 ### Deployment
 
-[https://ffxivtext.arkady14.tech/](https://ffxivtext.arkady14.tech/)
+[https://ffxivtext.arkady14.site/](https://ffxivtext.arkady14.site/)
 
 Hosted on the cheapest server, so don't expect any performance :)
