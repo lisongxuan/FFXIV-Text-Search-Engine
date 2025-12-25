@@ -44,6 +44,13 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.1.7",
+                date:"2025-12-25",
+                detail:[
+                    "1. Updated text data of 7.4 and earlier versions",
+                ]
+            },
+            {
                 version:"1.1.6",
                 date:"2025-10-14",
                 detail:[

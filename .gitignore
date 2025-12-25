@@ -1,2 +1,4 @@
 apis/config.txt
 scripts/config.txt
+scripts/.venv/
+apis/.venv/
