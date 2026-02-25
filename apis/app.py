@@ -27,6 +27,10 @@ api = Api(app)
 
 # Configure your SQLAlchemy database URI here
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{user}:{password}@{host}:{port}/{database}'
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800
+app.config['SQLALCHEMY_POOL_PRE_PING'] = True
+app.config['SQLALCHEMY_POOL_SIZE'] = 10
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 20
 db = SQLAlchemy(app)
 
 class Versions(db.Model):
@@ -35,12 +39,14 @@ class Versions(db.Model):
     version = db.Column(db.String(255))
     run_date = db.Column(db.DateTime)
 
+_table_cache = {}
+
 def Data(table_name):
-    metadata = MetaData()
-    metadata.bind = db.engine
-    table = Table(table_name, metadata, autoload_with=db.engine)
-    metadata.reflect(bind=db.engine)
-    return table
+    if table_name not in _table_cache:
+        metadata = MetaData()
+        table = Table(table_name, metadata, autoload_with=db.engine)
+        _table_cache[table_name] = table
+    return _table_cache[table_name]
 
 def get_table_name(language, version):
     version_replaced = version.replace('.', '_')
