@@ -2,6 +2,7 @@ from flask import Flask,jsonify
 from flask_restful import Resource, Api, reqparse
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func, text, MetaData, Table, create_engine, select, union_all, literal, or_
+from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.orm import sessionmaker
 import configparser
 import datetime
@@ -44,7 +45,10 @@ _table_cache = {}
 def Data(table_name):
     if table_name not in _table_cache:
         metadata = MetaData()
-        table = Table(table_name, metadata, autoload_with=db.engine)
+        try:
+            table = Table(table_name, metadata, autoload_with=db.engine)
+        except NoSuchTableError:
+            return None
         _table_cache[table_name] = table
     return _table_cache[table_name]
 
@@ -131,11 +135,8 @@ class AllLanguages(Resource):
         return [lang.language for lang in languages]
 
 class VersionsByLanguage(Resource):
-    def get(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('language', required=True, location='args')
-        args = parser.parse_args()
-        versions = Versions.query.filter_by(language=args['language']).all()
+    def get(self, language):
+        versions = Versions.query.filter_by(language=language).all()
         return [v.version for v in versions]
 
 
@@ -659,6 +660,8 @@ class DataByPath(Resource):
         args = parser.parse_args()
         table_name = get_table_name(args['language'], args['version'])
         data_table = Data(table_name)
+        if data_table is None:
+            return {'error': f"Invalid language/version: {args['language']}/{args['version']}"}, 404
         data = db.session.query(data_table).filter_by(path=args['path']).all()
         if data:
             return [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
