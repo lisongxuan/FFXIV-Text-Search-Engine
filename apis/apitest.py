@@ -165,7 +165,7 @@ def run_all_tests(runner: APITestRunner, test_filter: str = None):
             runner.context["first_language"] = data[0]
 
     if should_run("获取所有版本"):
-        runner.run_test(
+        status, data = runner.run_test(
             "获取所有版本",
             "GET", "/versions",
             checks=[
@@ -176,6 +176,8 @@ def run_all_tests(runner: APITestRunner, test_filter: str = None):
                 ("包含 version 字段", lambda s, d: "version" in d[0] if d else True),
             ]
         )
+        if data and isinstance(data, list):
+            runner.context["all_versions_data"] = data
 
     # ========================================
     # 2. 版本查询
@@ -200,6 +202,13 @@ def run_all_tests(runner: APITestRunner, test_filter: str = None):
             )
             if data and isinstance(data, list) and len(data) > 0:
                 runner.context["first_version"] = data[-1]
+
+        if not runner.context.get("first_version"):
+            all_ver = runner.context.get("all_versions_data", [])
+            for v in all_ver:
+                if v.get("language") == lang:
+                    runner.context["first_version"] = v.get("version")
+                    break
 
         if should_run("获取语言最新版本"):
             runner.run_test(
@@ -267,7 +276,7 @@ def run_all_tests(runner: APITestRunner, test_filter: str = None):
         runner.skip_test("多语言包含搜索", "语言或版本数据不足")
         runner.skip_test("多语言精确搜索", "语言或版本数据不足")
     else:
-        all_versions_status, all_versions_data = runner._request("GET", "/versions")
+        all_versions_status, all_versions_data, _ = runner._request("GET", "/versions")
         lang_version_map = {}
         if isinstance(all_versions_data, list):
             for v in all_versions_data:

@@ -684,9 +684,9 @@ class DataAroundPathAndId(Resource):
         if data:
             data_around = db.session.query(data_table).filter_by(path=args['path']).all()
             data_index = data_around.index(data)
-            near_range = args['near_range'] if args['near_range'] else near_range
-            start = max(0, data_index - near_range)
-            end = data_index + near_range + 1
+            nearrange = args['near_range'] if args['near_range'] else near_range
+            start = max(0, data_index - nearrange)
+            end = data_index + nearrange + 1
             results = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data_around[start:end]]
         else:
             results.append({'error': f'Data not found'})
