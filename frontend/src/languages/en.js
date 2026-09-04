@@ -1,12 +1,14 @@
 const en = {
     header: {
         title:'Final Fantasy XIV Text Searcher',
-        partial:'Partial Search',
-        partialDesc:"Partial Search: Search results contain input content",
-        similar:'Similar Search',
-        similarDesc:"Similar Search: Search results contain content similar to the input content",
-        exact:'Exact Search',
-        exactDesc:"Exact Search: Search results match the input content exactly",
+        keyword:'Keyword Match Search',
+        keywordDesc:'Keyword Match Search: returns entries containing the keywords of your input (token match, not ranked).',
+        similar:'Similar Search (by relevance)',
+        similarDesc:'Similar Search: returns entries ranked by relevance to your input.',
+        phrase:'Exact Phrase Search',
+        phraseDesc:'Exact Phrase Search: returns entries containing your input as an exact, contiguous phrase.',
+        exactMatch:'Exact Match Search',
+        exactMatchDesc:'Exact Match Search: only entries whose entire text equals your input exactly (useful to locate a specific line).',
         about:'About',
         author:'Developer: Selini-神拳痕',
         github:'GitHub Repository',
@@ -44,10 +46,26 @@ const en = {
         pageTitle:"Update Log - Final Fantasy XIV Text Searcher",
         content:[
             {
+                version:"1.2.0",
+                date:"2026-09-04",
+                detail:[
+                    "1. Added \"Exact Match Search\": finds entries whose entire text equals the input exactly (new strict_exact API, accelerated by a CRC32 index)",
+                    "2. Search performance: keyword/phrase search now uses the full-text (ngram) index instead of full table scans; multi-version search is much faster",
+                    "3. Database tuning: increased the InnoDB buffer pool and added name/path/CRC32 indexes to the data tables",
+                    "4. Renamed/described the four search modes: Keyword Match / Similar (by relevance) / Exact Phrase / Exact Match",
+                ]
+            },{
+                version:"1.1.8",
+                date:"2026-04-30",
+                detail:[
+                    "1. Updated text data of 7.5 and earlier versions"
+                ]
+            },
+            {
                 version:"1.1.7",
                 date:"2025-12-25",
                 detail:[
-                    "1. Updated text data of 7.4 and earlier versions",
+                    "1. Updated text data of 7.4 and earlier versions"
                 ]
             },
             {

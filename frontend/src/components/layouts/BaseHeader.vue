@@ -25,10 +25,10 @@
     <el-tooltip
         class="box-item"
         effect="dark"
-        :content="$t('header.partialDesc')"
+        :content="$t('header.keywordDesc')"
         placement="bottom-start"
       >
-      <el-menu-item index="include">{{$t('header.partial')}}</el-menu-item></el-tooltip>
+      <el-menu-item index="include">{{$t('header.keyword')}}</el-menu-item></el-tooltip>
       <el-tooltip
         class="box-item"
         effect="dark"
@@ -39,10 +39,17 @@
       <el-tooltip
         class="box-item"
         effect="dark"
-        :content="$t('header.exactDesc')"
+        :content="$t('header.phraseDesc')"
         placement="bottom-start"
       >
-      <el-menu-item index="exact">{{$t('header.exact')}}</el-menu-item></el-tooltip>
+      <el-menu-item index="exact">{{$t('header.phrase')}}</el-menu-item></el-tooltip>
+      <el-tooltip
+        class="box-item"
+        effect="dark"
+        :content="$t('header.exactMatchDesc')"
+        placement="bottom-start"
+      >
+      <el-menu-item index="strict_exact">{{$t('header.exactMatch')}}</el-menu-item></el-tooltip>
     </el-menu>
 <MainManu/>
   </div>

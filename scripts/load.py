@@ -43,11 +43,29 @@ if cursor.fetchone() is None:
         name VARCHAR(255),
         data LONGTEXT,
         path VARCHAR(255),
-        PRIMARY KEY (id, path)
+        PRIMARY KEY (id, path),
+        KEY idx_name (name),
+        KEY idx_path (path)
     )
     """)
-    # Now, add the FULLTEXT index in a separate statement
-    cursor.execute(f"ALTER TABLE {table_name} ADD FULLTEXT(data) WITH PARSER ngram")
+
+# 幂等补齐索引：FULLTEXT(ngram) + idx_name + idx_path。
+# 新表在 CREATE 时已带 idx_name/idx_path；对导入前已存在的旧表，此处自动补加。
+def ensure_index(index_name, ddl):
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.statistics "
+        "WHERE table_schema=%s AND table_name=%s AND index_name=%s",
+        (database, table_name, index_name))
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(ddl)
+        db.commit()
+        print(f"已为 {table_name} 添加索引 {index_name}")
+
+ensure_index('data', f"ALTER TABLE {table_name} ADD FULLTEXT(data) WITH PARSER ngram")
+ensure_index('idx_name', f"ALTER TABLE {table_name} ADD INDEX idx_name (name)")
+ensure_index('idx_path', f"ALTER TABLE {table_name} ADD INDEX idx_path (path)")
+# 严格等值查询加速：CRC32(data) 函数索引（供 strict_exact 使用，WHERE CRC32(data)=CRC32(:d) AND data=:d）
+ensure_index('idx_crc', f"ALTER TABLE {table_name} ADD INDEX idx_crc ((CRC32(data)))")
 
 cursor.execute("SHOW TABLES LIKE 'versions'")
 if cursor.fetchone() is None:

@@ -366,11 +366,22 @@ class IncludeMultiDataByData(Resource):
         table_name = get_table_name(args['language'], args['version'])
         table = Data(table_name)
 
-        # 优化分页查询
-        stmt = select(table.id, table.name, table.data, table.path).where(table.data.like(f"%{args['data']}%"))
-        total_query = db.session.execute(select(db.func.count()).select_from(stmt.subquery())).scalar()
+        # 优化分页查询：使用 FULLTEXT 索引（ngram），避免 LIKE '%...%' 全表扫描。
+        # ngram 最小分词长度为2，过短关键词退化为 LIKE（低频）。
+        m = args['data'].strip()
+        if len(m) < 2:
+            stmt = select(table.id, table.name, table.data, table.path).where(table.data.like(f"%{m}%"))
+            total_query = db.session.execute(select(db.func.count()).select_from(stmt.subquery())).scalar()
+            data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
+        else:
+            total_query = db.session.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE)"),
+                {'d': m}).scalar()
+            data = db.session.execute(
+                text(f"SELECT id, name, data, path FROM {table_name} WHERE MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE) "
+                     f"ORDER BY MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE) DESC LIMIT :lim OFFSET :off"),
+                {'d': m, 'lim': args['per_page'], 'off': (args['page'] - 1) * args['per_page']}).fetchall()
         print(datetime.datetime.now())
-        data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
         print(datetime.datetime.now())
         initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
 
@@ -425,10 +436,21 @@ class ExactMultiDataByData(Resource):
         table_name = get_table_name(args['language'], args['version'])
         table = Data(table_name)
 
-        # 分页查询优化
-        stmt = select(table.id, table.name, table.data, table.path).where(table.data == args['data'])
-        total_query = db.session.execute(select(func.count()).select_from(stmt.subquery())).scalar()
-        data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
+        # 分页查询优化：使用 FULLTEXT(ngram) 索引做精确短语匹配，避免 data==... 全表扫描。
+        m = args['data'].strip()
+        if len(m) < 2:
+            stmt = select(table.id, table.name, table.data, table.path).where(table.data == m)
+            total_query = db.session.execute(select(func.count()).select_from(stmt.subquery())).scalar()
+            data = db.session.execute(stmt.limit(args['per_page']).offset((args['page'] - 1) * args['per_page'])).fetchall()
+        else:
+            phrase = '"' + m.replace('"', '\\"') + '"'
+            total_query = db.session.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE MATCH(data) AGAINST (:d IN BOOLEAN MODE)"),
+                {'d': phrase}).scalar()
+            data = db.session.execute(
+                text(f"SELECT id, name, data, path FROM {table_name} WHERE MATCH(data) AGAINST (:d IN BOOLEAN MODE) "
+                     f"LIMIT :lim OFFSET :off"),
+                {'d': phrase, 'lim': args['per_page'], 'off': (args['page'] - 1) * args['per_page']}).fetchall()
         initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
         print(datetime.datetime.now())
         if not initResults:
@@ -472,13 +494,30 @@ def include_search_across_tables(data, lang_version_tables, page=1, per_page=10)
     total_count = 0
     queries = []
     print(datetime.datetime.now())
-    # 首先计算总记录数
-    for language, version, table_name in lang_version_tables:
-        table = Data(table_name)
-        count_stmt = select(func.count()).select_from(table).where(table.data.like(f"%{data}%"))
-        total_count += db.session.execute(count_stmt).scalar()
+    # 使用 FULLTEXT(ngram) 索引搜索，避免 LIKE '%...%' 全表扫描；关键词<2字节退化为 LIKE
+    use_fts = len(data.strip()) >= 2
 
-    total_pages = (total_count + per_page - 1) // per_page
+    def _count(table_name):
+        if use_fts:
+            return db.session.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE)"),
+                {'d': data}).scalar()
+        t = Data(table_name)
+        return db.session.execute(select(func.count()).select_from(t).where(t.data.like(f"%{data}%"))).scalar()
+
+    def _select(table_name, limit, offset):
+        if use_fts:
+            return db.session.execute(
+                text(f"SELECT id, name, data, path FROM {table_name} WHERE MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE) "
+                     f"ORDER BY MATCH(data) AGAINST (:d IN NATURAL LANGUAGE MODE) DESC LIMIT :lim OFFSET :off"),
+                {'d': data, 'lim': limit, 'off': offset}).fetchall()
+        t = Data(table_name)
+        stmt = select(t.id, t.name, t.data, t.path).where(t.data.like(f"%{data}%")).limit(limit).offset(offset)
+        return db.session.execute(stmt).fetchall()
+
+    # 首先计算总记录数（逐表，使用 FULLTEXT 索引）
+    for language, version, table_name in lang_version_tables:
+        total_count += _count(table_name)
 
     # 确定从哪个表格开始查询和跳过多少条记录
     items_to_skip = (page - 1) * per_page
@@ -488,24 +527,19 @@ def include_search_across_tables(data, lang_version_tables, page=1, per_page=10)
         if items_collected >= per_page:
             break  # 已收集到足够的条目
 
-        table = Data(table_name)
         if items_to_skip > 0:
             # 计算当前表格的记录数
-            count_stmt = select(func.count()).select_from(table).where(table.data.like(f"%{data}%"))
-            table_count = db.session.execute(count_stmt).scalar()
-
+            table_count = _count(table_name)
             if items_to_skip >= table_count:
                 # 如果需要跳过的条目数大于当前表格的记录数，则跳过这个表格
                 items_to_skip -= table_count
                 continue
             else:
                 # 调整查询以跳过部分记录
-                stmt = select(table.id, table.name, table.data, table.path).where(table.data.like(f"%{data}%")).limit(per_page - items_collected).offset(items_to_skip)
+                query_results = _select(table_name, per_page - items_collected, items_to_skip)
                 items_to_skip = 0  # 重置跳过的条目数，因为已经开始收集数据
         else:
-            stmt = select(table.id, table.name, table.data, table.path).where(table.data.like(f"%{data}%")).limit(per_page - items_collected)
-
-        query_results = db.session.execute(stmt).fetchall()
+            query_results = _select(table_name, per_page - items_collected, 0)
 
         for result in query_results:
             queries.append({
@@ -586,13 +620,31 @@ def exact_search_across_tables(data, lang_version_tables, page=1, per_page=10):
     total_count = 0
     queries = []
     print(datetime.datetime.now())
-    # 首先计算总记录数
-    for language, version, table_name in lang_version_tables:
-        table = Data(table_name)
-        count_stmt = select(func.count()).select_from(table).where(table.data == f"{data}")
-        total_count += db.session.execute(count_stmt).scalar()
+    # 使用 FULLTEXT(ngram) 索引做精确短语匹配，避免 data==... 全表扫描；<2字节退化为等值
+    use_fts = len(data.strip()) >= 2
+    phrase = '"' + data.strip().replace('"', '\\"') + '"'
 
-    total_pages = (total_count + per_page - 1) // per_page
+    def _count(table_name):
+        if use_fts:
+            return db.session.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE MATCH(data) AGAINST (:d IN BOOLEAN MODE)"),
+                {'d': phrase}).scalar()
+        t = Data(table_name)
+        return db.session.execute(select(func.count()).select_from(t).where(t.data == data)).scalar()
+
+    def _select(table_name, limit, offset):
+        if use_fts:
+            return db.session.execute(
+                text(f"SELECT id, name, data, path FROM {table_name} WHERE MATCH(data) AGAINST (:d IN BOOLEAN MODE) "
+                     f"LIMIT :lim OFFSET :off"),
+                {'d': phrase, 'lim': limit, 'off': offset}).fetchall()
+        t = Data(table_name)
+        stmt = select(t.id, t.name, t.data, t.path).where(t.data == data).limit(limit).offset(offset)
+        return db.session.execute(stmt).fetchall()
+
+    # 首先计算总记录数（逐表，使用 FULLTEXT 索引）
+    for language, version, table_name in lang_version_tables:
+        total_count += _count(table_name)
 
     # 确定从哪个表格开始查询和跳过多少条记录
     items_to_skip = (page - 1) * per_page
@@ -602,24 +654,19 @@ def exact_search_across_tables(data, lang_version_tables, page=1, per_page=10):
         if items_collected >= per_page:
             break  # 已收集到足够的条目
 
-        table = Data(table_name)
         if items_to_skip > 0:
             # 计算当前表格的记录数
-            count_stmt = select(func.count()).select_from(table).where(table.data == f"{data}")
-            table_count = db.session.execute(count_stmt).scalar()
-
+            table_count = _count(table_name)
             if items_to_skip >= table_count:
                 # 如果需要跳过的条目数大于当前表格的记录数，则跳过这个表格
                 items_to_skip -= table_count
                 continue
             else:
                 # 调整查询以跳过部分记录
-                stmt = select(table.id, table.name, table.data, table.path).where(table.data == f"{data}").limit(per_page - items_collected).offset(items_to_skip)
+                query_results = _select(table_name, per_page - items_collected, items_to_skip)
                 items_to_skip = 0  # 重置跳过的条目数，因为已经开始收集数据
         else:
-            stmt = select(table.id, table.name, table.data, table.path).where(table.data == f"{data}").limit(per_page - items_collected)
-
-        query_results = db.session.execute(stmt).fetchall()
+            query_results = _select(table_name, per_page - items_collected, 0)
 
         for result in query_results:
             queries.append({
@@ -645,6 +692,135 @@ def exact_search_across_tables(data, lang_version_tables, page=1, per_page=10):
         'pagination': pagination_info
     }
    
+def strict_exact_search_across_tables(data, lang_version_tables, page=1, per_page=10):
+    # 严格等值：WHERE CRC32(data)=CRC32(:d) AND data=:d
+    # 用 idx_crc 函数索引快速缩小到 CRC32 相同的少量行，再用 data=:d 精查，避免全表扫描。
+    total_count = 0
+    queries = []
+    if not data.strip():
+        return {'data': [], 'pagination': {'total': 0, 'page': page, 'per_page': per_page}}
+    for language, version, table_name in lang_version_tables:
+        total_count += db.session.execute(
+            text(f"SELECT COUNT(*) FROM {table_name} WHERE CRC32(data)=CRC32(:d) AND data=:d"),
+            {'d': data}).scalar()
+
+    items_to_skip = (page - 1) * per_page
+    items_collected = 0
+    for language, version, table_name in lang_version_tables:
+        if items_collected >= per_page:
+            break
+        if items_to_skip > 0:
+            stmt = text(f"SELECT id, name, data, path FROM {table_name} WHERE CRC32(data)=CRC32(:d) AND data=:d "
+                        f"ORDER BY id, path LIMIT :lim OFFSET :off")
+            rows = db.session.execute(stmt, {'d': data, 'lim': per_page - items_collected, 'off': items_to_skip}).fetchall()
+            items_to_skip = 0
+        else:
+            stmt = text(f"SELECT id, name, data, path FROM {table_name} WHERE CRC32(data)=CRC32(:d) AND data=:d "
+                        f"ORDER BY id, path LIMIT :lim")
+            rows = db.session.execute(stmt, {'d': data, 'lim': per_page - items_collected}).fetchall()
+
+        for r in rows:
+            queries.append({'id': r.id, 'name': r.name, 'data': r.data, 'path': r.path, 'language': language, 'version': version})
+            items_collected += 1
+            if items_collected >= per_page:
+                break
+
+    return {'data': queries, 'pagination': {'total': total_count, 'page': page, 'per_page': per_page}}
+
+class StrictExactMultiLanguagesDataByData(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('page', type=int, location='args', default=1)
+        parser.add_argument('per_page', type=int, location='args', default=10)
+        args = parser.parse_args()
+
+        languages = args['languages'].split(',')
+        versions = args['versions'].split(',')
+        lang_version_tables = [(language, version, get_table_name(language, version)) for language, version in zip(languages, versions)]
+
+        search_results = strict_exact_search_across_tables(args['data'], lang_version_tables, args['page'], args['per_page'])
+        initresults = search_results['data']
+        total = search_results['pagination']['total']
+        if not initresults:
+            return {'data': [], 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total}}
+
+        paths_ids = set((r['path'], r['id']) for r in initresults)
+        data_mapping = {}
+        for language, version in zip(languages, versions):
+            table_name = get_table_name(language, version)
+            data_table = Data(table_name)
+            all_data = db.session.query(data_table).filter(
+                data_table.path.in_([p for p, _ in paths_ids]),
+                data_table.id.in_([i for _, i in paths_ids])
+            ).all()
+            for d in all_data:
+                key = (d.path, d.id)
+                data_mapping.setdefault(key, []).append({'language': language, 'version': version, 'data': d.data})
+        db.session.close()
+
+        results = []
+        for r in initresults:
+            key = (r['path'], r['id'])
+            results.append({'id': r['id'], 'name': r['name'], 'path': r['path'], 'data': data_mapping.get(key, [])})
+        return {'data': results, 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total}}
+
+class StrictExactDataByData(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('data', required=True, location='args')
+        parser.add_argument('language', required=True, location='args')
+        parser.add_argument('version', required=True, location='args')
+        parser.add_argument('languages', required=True, location='args')
+        parser.add_argument('versions', required=True, location='args')
+        parser.add_argument('page', type=int, required=False, default=1, location='args')
+        parser.add_argument('per_page', type=int, required=False, default=10, location='args')
+        args = parser.parse_args()
+
+        languages = args['languages'].split(',')
+        versions = args['versions'].split(',')
+        table_name = get_table_name(args['language'], args['version'])
+        table = Data(table_name)
+
+        # 严格等值（CRC32 函数索引加速）：WHERE CRC32(data)=CRC32(:d) AND data=:d
+        m = args['data'].strip()
+        if not m:
+            return {'data': [], 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': 0}}
+        total_query = db.session.execute(
+            text(f"SELECT COUNT(*) FROM {table_name} WHERE CRC32(data)=CRC32(:d) AND data=:d"),
+            {'d': m}).scalar()
+        data = db.session.execute(
+            text(f"SELECT id, name, data, path FROM {table_name} WHERE CRC32(data)=CRC32(:d) AND data=:d "
+                 f"ORDER BY id, path LIMIT :lim OFFSET :off"),
+            {'d': m, 'lim': args['per_page'], 'off': (args['page'] - 1) * args['per_page']}).fetchall()
+        initResults = [{'id': d.id, 'name': d.name, 'data': d.data, 'path': d.path} for d in data]
+
+        if not initResults:
+            return {'data': [], 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total_query}}
+
+        paths_ids = set((r['path'], r['id']) for r in initResults)
+        paths, ids = zip(*paths_ids)
+        data_mapping = {}
+        for language, version in zip(languages, versions):
+            table_name = get_table_name(language, version)
+            data_table = Data(table_name)
+            all_data = db.session.query(data_table).filter(
+                data_table.path.in_(paths),
+                data_table.id.in_(ids)
+            ).all()
+            for d2 in all_data:
+                key = (d2.path, d2.id)
+                data_mapping.setdefault(key, []).append({'language': language, 'version': version, 'data': d2.data})
+        db.session.close()
+
+        results = []
+        for r in initResults:
+            key = (r['path'], r['id'])
+            results.append({'id': r['id'], 'name': r['name'], 'path': r['path'], 'data': data_mapping.get(key, [])})
+        return {'data': results, 'pagination': {'page': args['page'], 'per_page': args['per_page'], 'total': total_query}}
+
 class ExactMultiLanguagesDataByData(Resource):
     def get(self):
         print(datetime.datetime.now())
@@ -843,6 +1019,8 @@ api.add_resource(IncludeMultiDataByData, '/include_multi_data_by_data')
 api.add_resource(IncludeMultiLanguagesDataByData, '/include_multi_language_data_by_data')
 api.add_resource(ExactMultiDataByData, '/exact_multi_data_by_data')
 api.add_resource(ExactMultiLanguagesDataByData, '/exact_multi_language_data_by_data')
+api.add_resource(StrictExactDataByData, '/strict_exact_data_by_data')
+api.add_resource(StrictExactMultiLanguagesDataByData, '/strict_exact_multi_language_data_by_data')
 api.add_resource(DataByPath, '/data_by_path')
 api.add_resource(DataAroundPathAndId, '/data_around_path_and_id')
 api.add_resource(MultiLanguagesDataByPathAndId, '/multi_language_data_by_path_and_id')

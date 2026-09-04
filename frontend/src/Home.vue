@@ -323,7 +323,8 @@ const handleInputChange = (value: string, newSearchFlag: boolean = true) => {
     let dataItems: DataItem[] = [];
     const fetchData = headerSelected.value === 'similar' ? getMultiLanguagesDataByData :
                       headerSelected.value === 'include' ? getIncludeMultiLanguagesDataByData :
-                      getExactMultiLanguagesDataByData;
+                      headerSelected.value === 'exact' ? getExactMultiLanguagesDataByData :
+                      getStrictExactMultiLanguagesDataByData;
     fetchData({ data: inputValue.value, languages: searchedLanguages, versions: searchedVersions, page: pagination.page, per_page: pagination.per_page }).then((data: any) => {
       dataItems = data.data;
       pagination.total = data.pagination.total;
@@ -343,7 +344,8 @@ const handleInputChange = (value: string, newSearchFlag: boolean = true) => {
     let dataItems: DataItem[] = [];
     const fetchData = headerSelected.value === 'similar' ? getDataByData :
                       headerSelected.value === 'include' ? getIncludeDataByData :
-                      getExactDataByData;
+                      headerSelected.value === 'exact' ? getExactDataByData :
+                      getStrictExactDataByData;
     fetchData({ data: inputValue.value, languages: searchedLanguages, versions: searchedVersions, language: selectedColumn?.language, version: selectedColumn?.version, page: pagination.page, per_page: pagination.per_page }).then((data: any) => {
       dataItems = data.data;
       pagination.total = data.pagination.total;
@@ -412,6 +414,16 @@ const getExactMultiLanguagesDataByData = async (data: any) => {
 const getExactDataByData = async (data: any) => {
   const queryParams = new URLSearchParams(data).toString();
   const result = await axios.get(`${config.backendUrl}/exact_multi_data_by_data?${queryParams}`);
+  return result.data;
+};
+const getStrictExactDataByData = async (data: any) => {
+  const queryParams = new URLSearchParams(data).toString();
+  const result = await axios.get(`${config.backendUrl}/strict_exact_data_by_data?${queryParams}`);
+  return result.data;
+};
+const getStrictExactMultiLanguagesDataByData = async (data: any) => {
+  const queryParams = new URLSearchParams(data).toString();
+  const result = await axios.get(`${config.backendUrl}/strict_exact_multi_language_data_by_data?${queryParams}`);
   return result.data;
 };
 const getMultiLanguagesDataAroundName = async (data: any) => {
